@@ -89,14 +89,19 @@ void draw(){
 void dataMosh(Point p1, Point p2) {
   if(p1.x < staticImage.width && p1.y < staticImage.height)
    {     
-     float dist = dist(p1.x, p1.y, p2.x, p2.y);
+     int dx = int(p2.x - p1.x);
+     int dy = int(p2.y - p1.y);
 
      for (int y = 0 - (h/2); y < (h/2); y++) {
       for (int x = 0 - (w/2); x < (w/2); x++) {
        if(p2.x+x < staticImage.width-1 && p2.y+y < staticImage.height-1)
        {
          color c1 = staticImage.pixels[(p2.y+y)*staticImage.width+(p2.x+x)];
-         staticImage.pixels[(p1.y+y)*staticImage.width+(p1.x+x)] = c1;
+         
+         for(int xLine = p1.x; xLine < p2.x; xLine++){
+           int yLine = p1.y + (dy) * (xLine-p1.x)/(dx);
+           staticImage.pixels[(yLine+y)*staticImage.width+(xLine+x)] = c1;
+         }
        }
       }
      }
