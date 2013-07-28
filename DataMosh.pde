@@ -2,9 +2,9 @@ import processing.opengl.*;
 import gifAnimation.*;
 import JMyron.*;
 
-PImage img1, img2, staticImage;
+PImage currentFrame, prevFrame, staticImage;
 PImage[] allFrames;
-// img1 and img2 are the location to temporarily store the previous 
+// currentFrame and prevFrame are the location to temporarily store the previous 
 // and current frame.
 int NROWS, NCOLS;
 int PIXELSIZE = 6; //has to be even
@@ -12,13 +12,10 @@ final float LIMIT = 30.0;
 
 int w, h;
 // w and h are the size of the grid.
-JMyron m;
+JMyron camera;
 
-boolean hasStaticImage = false;
-
-boolean useGif = false;
-boolean useBlendmode = true;
-
+boolean USE_GIF = false;
+boolean USE_BLEND_MODE = true;
 boolean PAUSE = false;
 
 int blendMode = LIGHTEST;
@@ -31,33 +28,33 @@ void setup(){
   //hint(ENABLE_OPENGL_4X_SMOOTH);
   frameRate(60); 
 
-   m = new JMyron();
-   m.start(videoWidth, videoHeight);
-   m.findGlobs(0);
+   camera = new JMyron();
+   camera.start(videoWidth, videoHeight);
+   camera.findGlobs(0);
    
-   img1 = createImage(videoWidth,videoHeight,ARGB);
-   img2 = createImage(videoWidth,videoHeight,ARGB);
+   currentFrame = createImage(videoWidth,videoHeight,ARGB);
+   prevFrame = createImage(videoWidth,videoHeight,ARGB);
    staticImage = createImage(videoWidth,videoHeight,ARGB);
    
-   if(useGif)
+   NROWS = int(currentFrame.height/PIXELSIZE);
+   NCOLS = int(currentFrame.width/PIXELSIZE);
+   
+   w = currentFrame.width/NCOLS;
+   h = currentFrame.height/NROWS;
+   
+   if(USE_GIF)
    {
      allFrames = Gif.getPImages(this, "gorilla.gif");
-     img1.width = allFrames[1].width;
-     img1.height = allFrames[1].height;
+     currentFrame.width = allFrames[1].width;
+     currentFrame.height = allFrames[1].height;
    }
-   
-   NROWS = int(img1.height/PIXELSIZE);
-   NCOLS = int(img1.width/PIXELSIZE);
-   
-   w = img1.width/NCOLS;
-   h = img1.height/NROWS;
 }
 
 int frameCounter = 0;
 void draw(){
   if(!PAUSE)
   {
-    if(useGif)
+    if(USE_GIF)
     {
       if(frameCounter > allFrames.length-2)
       {
@@ -68,120 +65,42 @@ void draw(){
     }
     
      background(#FFFFFF);
-      // copy the image from img1 to img2 - the previous frame.
-     img2.copy(img1,0,0,img1.width,img1.height,0,0,img2.width,img2.height);
-     img2.updatePixels();
-     m.update();
+      // copy the image from currentFrame to prevFrame - the previous frame.
+     prevFrame.copy(currentFrame,0,0,currentFrame.width,currentFrame.height,0,0,prevFrame.width,prevFrame.height);
+     prevFrame.updatePixels();
+     camera.update();
      
-     if(useGif)
+     if(USE_GIF)
      {
-       img1 = allFrames[frameCounter];
+       currentFrame = allFrames[frameCounter];
      }else{
-       // update the current frame to img1.
-       m.imageCopy(img1.pixels);
+       // update the current frame to currentFrame.
+       camera.imageCopy(currentFrame.pixels);
      }
-     img1.updatePixels();
-     //image(img1,0,0);
+     currentFrame.updatePixels();
      
      findFlow();
      
-     if(hasStaticImage)
-     {
-       if(useBlendmode){staticImage.blend(img1, 0, 0, videoWidth, videoHeight, 0, 0, videoWidth, videoHeight, blendMode);}
-       image(staticImage, videoWidth, 0, videoWidth, videoHeight);
-     }
+     if(USE_BLEND_MODE){ staticImage.blend(currentFrame, 0, 0, videoWidth, videoHeight, 0, 0, videoWidth, videoHeight, blendMode); }
+     image(staticImage, videoWidth, 0, videoWidth, videoHeight);
   }
 }
 
-void findFlow() {
-  int xOff = w/2;
-  int yOff = h/2;
-  for (int r=1;r<NROWS;r++) {
-    for (int c=1;c<NCOLS;c++) {
-      Point p1 = new Point(c*w, r*h);
-      Point p2 = findPoint(p1.x, p1.y, xOff, yOff);
-      
-      drawLine(p1,p2);
-    }
-  }
-}
+void dataMosh(Point p1, Point p2) {
+  if(p1.x < staticImage.width && p1.y < staticImage.height)
+   {     
+     float dist = dist(p1.x, p1.y, p2.x, p2.y);
 
-void drawLine(Point _p, Point _q) {
-// draw the arrow line from point _q to point _p.
-   if (_p.x!=_q.x || _p.y!=_q.y) {
-     line(_p.x,_p.y,_q.x,_q.y);
-     float ang = atan2(_q.y-_p.y,_q.x-_p.x);
-     float ln = w/3.0;
-     float tx = _p.x + ln*cos(ang-PI/6);
-     float ty = _p.y + ln*sin(ang-PI/6);
-     line(_p.x,_p.y,tx,ty);
-     tx = _p.x + ln*cos(ang+PI/6);
-     ty = _p.y + ln*sin(ang+PI/6);
-     line(_p.x,_p.y,tx,ty);
-     
-      //Datamosh
-     //color c1 = staticImage.pixels[(_q.y)*staticImage.width+(_q.x)];
-     
-     if(_p.x < staticImage.width && _p.y < staticImage.height)
-     {
-       for (int r=0-(h/2);r<(h/2);r++) {
-        for (int c=0-(w/2);c<(w/2);c++) {
-         if(_q.x+c < staticImage.width-1 && _q.y+r < staticImage.height-1)
-         {
-           color c1 = staticImage.pixels[(_q.y+r)*staticImage.width+(_q.x+c)];
-           staticImage.pixels[(_p.y+r)*staticImage.width+(_p.x+c)] = c1;
-         }
-        }
+     for (int y = 0 - (h/2); y < (h/2); y++) {
+      for (int x = 0 - (w/2); x < (w/2); x++) {
+       if(p2.x+x < staticImage.width-1 && p2.y+y < staticImage.height-1)
+       {
+         color c1 = staticImage.pixels[(p2.y+y)*staticImage.width+(p2.x+x)];
+         staticImage.pixels[(p1.y+y)*staticImage.width+(p1.x+x)] = c1;
        }
-     }
-     
-   }else {
-     line(_p.x,_p.y,_q.x,_q.y);
-   }
-   
-   staticImage.updatePixels();
-}
-
-Point findPoint(int _x, int _y, int _xo, int _yo) {
-
-// Given a pixel (_x, _y) in img1, we search the neighborhood of that
-// pixel in img2 and try to find a matching colour.
-// 
-// The neighborhood size is defined by (w x h) and the boundaries are
-// x0 - left
-// x1 - right
-// y0 - top
-// y1 - right
-
-   int x0 = _x - _xo;
-   int x1 = _x + _xo;
-   int y0 = _y - _yo;
-   int y1 = _y + _yo;
-
-// Initialize the minimum difference to a high value.
-// Loop through the pixels in img2 within the boundary.
-// Find the pixel with minimum difference from the original one 
-// in img1.
-
-   float minDiff = 999999999;
-   Point p = new Point(_x,_y);
-   color c1 = img1.pixels[_y*img1.width+_x];
-   color c2 = img2.pixels[_y*img2.width+_x];
-   if (!matchCol(c1,c2)) {
-      for (int r=y0;r<y1;r++) {
-        for (int c=x0;c<x1;c++) {
-          c2 = img2.pixels[r*img2.width+c];
-          float diff = dist(red(c1),green(c1),blue(c1),
-          red(c2),green(c2),blue(c2));
-          if (diff<minDiff) {
-            minDiff = diff;
-            p.x = c;
-            p.y = r;
-          }
-        }
       }
+     }
    }
-   return p;
 }
 
 void keyPressed()
@@ -189,18 +108,16 @@ void keyPressed()
   if(key == 'w')
   {
     staticImage = createImage(videoWidth,videoHeight,ARGB);
-    m.update();
-    m.imageCopy(staticImage.pixels);
+    camera.update();
+    camera.imageCopy(staticImage.pixels);
     staticImage.updatePixels();
-    hasStaticImage = true;
   }else if(key == 'i'){
     staticImage = loadImage("manson.jpg");
     staticImage.updatePixels(); 
-    hasStaticImage = true;
   }else if(key == 'p'){
     PAUSE = !PAUSE;
   }else if(key == 'b'){
-    useBlendmode = !useBlendmode;
+    USE_BLEND_MODE = !USE_BLEND_MODE;
   }
   
   switch(key)
@@ -236,6 +153,83 @@ void keyPressed()
     blendMode = BLEND;
     break;
   }
+}
+
+//OPTICAL FLOW FUNCTIONS
+
+void findFlow() {
+  int xOff = w/2;
+  int yOff = h/2;
+  for (int r=1;r<NROWS;r++) {
+    for (int c=1;c<NCOLS;c++) {
+      Point p1 = new Point(c*w, r*h);
+      Point p2 = findPoint(p1.x, p1.y, xOff, yOff);     
+      drawLine(p1,p2);
+    }
+  }
+}
+
+void drawLine(Point p1, Point p2) {
+// draw the arrow line from point p2 to point p1.
+   if (p1.x!=p2.x || p1.y!=p2.y) {
+     line(p1.x,p1.y,p2.x,p2.y);
+     float ang = atan2(p2.y-p1.y,p2.x-p1.x);
+     float ln = w/3.0;
+     float tx = p1.x + ln*cos(ang-PI/6);
+     float ty = p1.y + ln*sin(ang-PI/6);
+     line(p1.x,p1.y,tx,ty);
+     tx = p1.x + ln*cos(ang+PI/6);
+     ty = p1.y + ln*sin(ang+PI/6);
+     line(p1.x,p1.y,tx,ty);
+     
+     dataMosh(p1, p2);
+   }else {
+     line(p1.x,p1.y,p2.x,p2.y);
+   }
+   
+   staticImage.updatePixels();
+}
+
+Point findPoint(int _x, int _y, int _xo, int _yo) {
+
+// Given a pixel (_x, _y) in currentFrame, we search the neighborhood of that
+// pixel in prevFrame and try to find a matching colour.
+// 
+// The neighborhood size is defined by (w x h) and the boundaries are
+// x0 - left
+// x1 - right
+// y0 - top
+// y1 - right
+
+   int x0 = _x - _xo;
+   int x1 = _x + _xo;
+   int y0 = _y - _yo;
+   int y1 = _y + _yo;
+
+// Initialize the minimum difference to a high value.
+// Loop through the pixels in prevFrame within the boundary.
+// Find the pixel with minimum difference from the original one 
+// in currentFrame.
+
+   float minDiff = 999999999;
+   Point p = new Point(_x,_y);
+   color c1 = currentFrame.pixels[_y*currentFrame.width+_x];
+   color c2 = prevFrame.pixels[_y*prevFrame.width+_x];
+   if (!matchCol(c1,c2)) {
+      for (int r=y0;r<y1;r++) {
+        for (int c=x0;c<x1;c++) {
+          c2 = prevFrame.pixels[r*prevFrame.width+c];
+          float diff = dist(red(c1),green(c1),blue(c1),
+          red(c2),green(c2),blue(c2));
+          if (diff<minDiff) {
+            minDiff = diff;
+            p.x = c;
+            p.y = r;
+          }
+        }
+      }
+   }
+   return p;
 }
 
 boolean matchCol(color c1, color c2) {
